@@ -1,7 +1,7 @@
 # VideoStamperWin
 By Kasey M. Strube
 
-Version 0.1
+Version 0.2
 
 
 Utilizes ffmpeg to automatically add text and timestamps to videos.
@@ -15,31 +15,36 @@ Windows
 
 Powershell
 
-FFMPEG binaries (including ffprobe)
+FFMPEG binaries (including ffprobe and ffplay)
 
 
-TODO Version 0.2 Features-
+TODO Version 0.3 Features-
 
-*Add options for border color and border size
+*add arbitrary text to video
 
-*add options to position stamps in Top Left, Top Middle, Top Right, Middle Left, 
+*add tooltip for format strings
+
+*give arbitrary text custom start time and duration.
+
+Features-
+
+*set border color and border size
+
+*position stamps in Top Left, Top Middle, Top Right, Middle Left, 
 Middle, Middle Right, Bottom Left, Bottom Middle, Bottom Right
 
 *Manually set date and time on timestamp
 
-*Independentally position Date Stamp and Time Stamp
+*Independentally position Date Stamp and Time Stamp using position and horizontal (xPad%)
+and vertical (yPad%) padding values
 
 *Preview before saving changes
 
 *Specify a save location and file name
 
-Version 0.1 Features-
+*Stamps timestamp from metadata of .MOV or .MP4 video files
 
-*Stamps timestamp from metadata of .MOV or .MP4 video files in bottom right (landscape)
-or bottom middle (portrait)
-
-*Allows the choice of using any installed font, font size, color, and whether to add a 
-1pt black border around text.
+*Allows the choice of using any installed font, font size, color, and border.
 
 
 Acknowledgements-
