@@ -7,7 +7,7 @@
 #                                                        | |              
 #                                                        |_|
 # By Kasey M. Strube
-# Version 0.1
+# Version 0.3
 #
 # Utilizes ffmpeg to automatically add text and timestamps to videos.
 # Used primary to convert iPhone .MOVs to MP4 for portability and add a
@@ -275,10 +275,20 @@ function Add-Control {
 	$panel.Controls.Add($control, $column, $row)
 }
 
+# Helper function to remove controls to TableLayoutPanel
+function Remove-Control {
+	param (
+		[System.Windows.Forms.TableLayoutPanel]$panel,
+		[System.Windows.Forms.Control]$control
+	)
+	$panel.Controls.Remove($control)
+}
+
 # Function to process .NET form inputs into a valid ffmpeg command
 function Process-Video {
 	param(
 		[System.Windows.Forms.Form]$form,
+		[object[]]$texts,
 		[int]$height,
 		[int]$width
 		)
@@ -399,7 +409,7 @@ function Process-Video {
 		$yCoor = $height-($height*($yPadding/100))-$fontsize
 	  }
 	}
-
+	$between = ""
 	# add to drawcalls
 	$c = $drawcalls[$position]["Count"]
 	$drawprops = @{
@@ -410,6 +420,9 @@ function Process-Video {
 		"xCoor" = $xCoor
 		"yCoor" = $yCoor
 		"text" = $text
+		"start" = -1
+		"end" = -1
+		"between" = $between
 	}
 	if($($userInput.Enable)){
 		$drawcalls[$position]["drawtexts"] += $drawprops
@@ -489,7 +502,7 @@ function Process-Video {
 			$yCoor = $height-($height*($yPadding/100))-$fontsize
 		  }
 		}
-
+		$between = ""
 		# add to drawcalls
 		$c = $drawcalls[$position]["Count"]
 		$drawprops = @{
@@ -500,12 +513,120 @@ function Process-Video {
 			"xCoor" = $xCoor
 			"yCoor" = $yCoor
 			"text" = $text
+			"start" = -1
+			"end" = 100000
+			"between" = $between
 		}
 
 		if($($userInput.EnableTime)){
 			$drawcalls[$position]["drawtexts"] += $drawprops
 			$drawcalls[$position]["Count"] += 1
 		}
+	}
+	
+	# Process Texts to add
+	foreach($text in $texts) {
+		
+		#TextFont = $textFont
+		#	TextSize = $textSize
+		#	TextColor = $textColor
+		#	TextBorderColor = $textBorderColor
+		#	TextBorderSize = $textBorderSize
+		#	TextPosition = $textPosition
+		#	Text = $textText = $textText.Substring(0, [math]::Min(64, $textText.Length))
+		#	TextStart = $textStart
+		#	TextDuration = $textDuration
+		#	TextXPad = $textXPad
+		#	TextYPad = $textYPad
+		
+		$font = $fontList | Where-Object { $_.Name -eq $text.TextFont }
+		Write-Verbose "Text Settings-"
+		Write-Verbose "Selected Font: $font.Name"
+		$fontfile = $font.FileName
+		$fontfile = "C\:/Windows/Fonts/" + $fontfile
+		Write-Verbose "Font File: $fontfile"
+		$fontsize = $text.TextSize
+		Write-Verbose "Font Size: $fontsize"
+		$fontcolor = $text.TextColor
+		Write-Verbose "Font Color: $fontcolor"
+		$borderColor = $text.TextBorderColor
+		if($borderColor -ne "none"){
+		  Write-Verbose "Border Color: $borderColor"
+		  $borderSize = $text.TextBorderSize
+		  Write-Verbose "Border Size: $borderSize"
+		  $borderw = "borderw=${borderSize}:bordercolor=${borderColor}:"
+		} else {
+		  $borderw = ""
+		}
+		$position = $text.TextPosition
+		Write-Verbose "Text Position: $position"
+		$xPadding = $text.TextXPad
+		$yPadding = $text.TextYPad
+		
+		$textStart = $text.TextStart
+		$textDuration = $text.TextDuration
+
+		$text = Escape-FFmpegOption -UnescapedString $text.Text
+
+		switch($position) {
+		  "Top Left" { 
+			$xCoor = "w-((w/100)*(100-${xPadding}))"
+			$yCoor = $height-((($height/100)*(100-$yPadding)))
+		  }
+		  "Top Middle" {
+			$xCoor = "w-(w/2)-(text_w/2)"
+			$yCoor = $height-((($height/100)*(100-$yPadding)))	
+		  }
+		  "Top Right" {
+			$xCoor = "w-(w*(${xPadding}/100))-text_w"
+			$yCoor = $height-((($height/100)*(100-$yPadding)))
+		  }
+		  "Middle Left" {
+			$xCoor = "w-((w/100)*(100-${xPadding}))"
+			$yCoor = $height-($height/2)-($fontsize/2)
+		  }
+		  "Middle" {
+			$xCoor = "w-(w/2)-(text_w/2)"
+			$yCoor = $height-($height/2)-($fontsize/2)
+		  }
+		  "Middle Right" {
+			$xCoor = "w-(w*(${xPadding}/100))-text_w"
+			$yCoor = $height-($height/2)-($fontsize/2)
+		  }
+		  "Bottom Left" {
+			$xCoor = "w-((w/100)*(100-${xPadding}))"
+			$yCoor = $height-($height*($yPadding/100))-$fontsize
+		  }
+		  "Bottom Middle" {
+			$xCoor = "w-(w/2)-(text_w/2)"
+			$yCoor = $height-($height*($yPadding/100))-$fontsize
+		  }
+		  "Bottom Right" {
+			$xCoor = "w-(w*(${xPadding}/100))-text_w"
+			$yCoor = $height-($height*($yPadding/100))-$fontsize
+		  }
+		  default {
+			$xCoor = "w-(w*(${xPadding}/100))-text_w"
+			$yCoor = $height-($height*($yPadding/100))-$fontsize
+		  }
+		}
+		$between = ":enable='between(t," + $textStart + "," + $textDuration + ")'"
+		# add to drawcalls
+		$c = $drawcalls[$position]["Count"]
+		$drawprops = @{
+			"fontfile" = $fontfile
+			"fontsize" = $fontsize
+			"fontcolor" = $fontcolor
+			"borderw" = $borderw
+			"xCoor" = $xCoor
+			"yCoor" = $yCoor
+			"text" = $text
+			"start" = $textStart
+			"end" = $textDuration
+			"between" = $between
+		}
+		$drawcalls[$position]["drawtexts"] += $drawprops
+		$drawcalls[$position]["Count"] += 1
 	}
 
 	# Build drawtext commands
@@ -529,7 +650,7 @@ function Process-Video {
 
 					# Check for overlap with previous text
 					Write-Verbose "Checking for text overlap. Text #$i yCoor: ${$currText.yCoor}. Text #$j yCoor: $($prevText.yCoor)"
-					if ([math]::abs($currText.yCoor - $prevText.yCoor) -lt ($currText.fontsize + 10)) {
+					if (([math]::abs($currText.yCoor - $prevText.yCoor) -lt ($currText.fontsize + 10)) -And ($currText.start -eq -1 -Or $prevText.start -eq -1 -Or ($currText.start -ge $prevText.start -And $currText.start -le $prevText.end)) ) {
 						if ($pos -match "Bottom") {
 							# Move the previous text up if position contains "Bottom"
 							$prevText.yCoor -= ($currText.fontsize + 10) - [math]::abs($currText.yCoor - $prevText.yCoor)
@@ -561,9 +682,9 @@ function Process-Video {
 		for ($i = 0; $i -lt $c; $i++) {
 			$currText = $drawcalls[$pos]["drawtexts"][$i]
 			if($drawtext){
-				$drawtext = $drawtext + "," + "drawtext=fontfile='" + $currText.fontfile + "':fontsize=" + $currText.fontsize + ":fontcolor=" + $currText.fontcolor + ":" + $currText.borderw + "x=" + $currText.xCoor + ":y=" + $currText.yCoor + ":text='" + $currText.text + "'"
+				$drawtext = $drawtext + "," + "drawtext=fontfile='" + $currText.fontfile + "':fontsize=" + $currText.fontsize + ":fontcolor=" + $currText.fontcolor + ":" + $currText.borderw + "x=" + $currText.xCoor + ":y=" + $currText.yCoor + ":text='" + $currText.text + "'" + $currText.between
 			} else {
-				$drawtext = "drawtext=fontfile='" + $currText.fontfile + "':fontsize=" + $currText.fontsize + ":fontcolor=" + $currText.fontcolor + ":" + $currText.borderw + "x=" + $currText.xCoor + ":y=" + $currText.yCoor + ":text='" + $currText.text + "'"
+				$drawtext = "drawtext=fontfile='" + $currText.fontfile + "':fontsize=" + $currText.fontsize + ":fontcolor=" + $currText.fontcolor + ":" + $currText.borderw + "x=" + $currText.xCoor + ":y=" + $currText.yCoor + ":text='" + $currText.text + "'" + $currText.between
 			}
 		}
 	}
@@ -811,13 +932,15 @@ Write-Verbose "Input File Path: $inputFile"
 Write-Verbose 'FFProbe command: ffprobe -v quiet -print_format json -show_entries stream=width,height -show_entries format_tags "$inputFile"'
 
 # Initialize ffprobe command to extract metadata
-$ffprobeCmd = &$ffprobe -v quiet -print_format json -show_entries stream=width,height -show_entries format_tags "$inputFile"
+$ffprobeCmd = &$ffprobe -v quiet -print_format json -show_entries stream=width,height,duration -show_entries format_tags "$inputFile"
 
 # parse Json
 $jsonObject = $ffprobeCmd | ConvertFrom-Json
 
 Write-Verbose "Video Metadata:"
-Write-Verbose $jsonObject
+if($Verbose){
+	Write $jsonObject
+}
 
 # Extract the creation date
 $creationDateString = $jsonObject.format.tags.'com.apple.quicktime.creationdate'
@@ -845,6 +968,7 @@ if(-Not $creationDateString){
 # Get the width and height
 $width = $jsonObject.streams[0].width
 $height = $jsonObject.streams[0].height
+$metaDur = $jsonObject.streams[0].duration
 
 #get default preview sizeInput
 if(Test-Path $iniFilePath) {
@@ -877,6 +1001,7 @@ $form = New-Object System.Windows.Forms.Form
 # form settings
 $rows = 11
 $columns = 14
+$addedTexts = 0
 
 $monthNum = [int](Get-Date -Date $CreationDate -UFormat "%m")
 $dayNum = [int](Get-Date -Date $CreationDate -UFormat "%d")
@@ -916,6 +1041,9 @@ while( $i -lt $rows) {
 	$tableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null 
 	$i++
 }
+
+#load added Text array
+$addedTextElements = @()
 
 # Create Labels
 $dateStamp = New-Object System.Windows.Forms.Label
@@ -1072,7 +1200,7 @@ $tableLayout.SetColumnSpan($yearLabel, 2)  # Span the label across 2 columns
 
 #DateFormatString Label
 $dateFormatLabel = New-Object System.Windows.Forms.Label
-$dateFormatLabel.Text = "Date Format String"
+$dateFormatLabel.Text = "Date Format"
 $dateFormatLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
 $tableLayout.SetColumnSpan($dateFormatLabel, 4)  # Span the label across 2 columns
 
@@ -1127,6 +1255,32 @@ $dateFormatInput = New-Object System.Windows.Forms.TextBox
 $dateFormatInput.Width = 200
 $dateFormatInput.Text = "M/d/yyyy"
 $tableLayout.SetColumnSpan($dateFormatInput, 4)  # Span the input across 2 columns
+
+# Create a ToolTip object
+$dateToolTip = New-Object System.Windows.Forms.ToolTip
+
+# Set tooltip properties
+#$dateToolTip.AutoPopDelay = 5000         # Tooltip remains visible for 5 seconds
+$dateToolTip.InitialDelay = 500          # Delay before showing tooltip (ms)
+$dateToolTip.ReshowDelay = 200           # Delay before showing again (ms)
+#$dateToolTip.ShowAlways = $true          # Always show the tooltip, even if form is inactive
+
+$dateToolTipText = @"
+Use these rules to build your format string
+yyyy = Year (4 digits)
+yy = Year (2 digits)
+MMMM = Full month name
+MMM = Abbreviated month name
+MM = Month (2 digits)
+M = Month (no leading 0)
+dddd = Full weekday name
+ddd = Abbreviated weekday name
+dd = Day of the month (2 digits)
+d = Day of the month (no leading 0)
+"@
+
+# Associate the tooltip with the button
+$dateToolTip.SetToolTip($dateFormatInput, $dateToolTipText)
 
 # XPad Input
 $xpadInput = New-Object System.Windows.Forms.NumericUpDown
@@ -1288,7 +1442,7 @@ $tableLayout.SetColumnSpan($ampmLabel, 2)  # Span the label across 2 columns
 
 #TimeFormatString Label
 $timeFormatLabel = New-Object System.Windows.Forms.Label
-$timeFormatLabel.Text = "Tim Format String"
+$timeFormatLabel.Text = "Time Format"
 $timeFormatLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
 $tableLayout.SetColumnSpan($timeFormatLabel, 4)  # Span the label across 2 columns
 
@@ -1357,6 +1511,31 @@ $timeFormatInput.Width = 200
 $timeFormatInput.Text = "h:mm:ss tt"
 $tableLayout.SetColumnSpan($timeFormatInput, 4)  # Span the input across 2 columns
 
+# Create a ToolTip object
+$timeToolTip = New-Object System.Windows.Forms.ToolTip
+
+# Set tooltip properties
+#$timeToolTip.AutoPopDelay = 5000         # Tooltip remains visible for 5 seconds
+$timeToolTip.InitialDelay = 500          # Delay before showing tooltip (ms)
+$timeToolTip.ReshowDelay = 200           # Delay before showing again (ms)
+#$timeToolTip.ShowAlways = $true          # Always show the tooltip, even if form is inactive
+
+$timeToolTipText = @"
+Use these rules to build your format string
+HH = Hour (24-hour format)
+H = Hour (24-hour format no leading 0)
+hh = Hour (12-hour format)
+h = Hour (12-hour format no leading 0)
+mm = Minute
+m = Minute (no leading 0)
+ss = Second
+s = Second (no leading 0)
+tt = AM/PM
+"@
+
+# Associate the tooltip with the button
+$timeToolTip.SetToolTip($timeFormatInput, $timeToolTipText)
+
 # XPad Input
 $xpadTimeInput = New-Object System.Windows.Forms.NumericUpDown
 $xpadTimeInput.Width = 100
@@ -1382,13 +1561,27 @@ Add-Control -panel $tableLayout -control $timeFormatInput -row 9 -column 8
 Add-Control -panel $tableLayout -control $xpadTimeInput -row 9 -column 12
 Add-Control -panel $tableLayout -control $ypadTimeInput -row 9 -column 13
 
-# Create and Add OK Button to Row 10
+# Create and Add preview Button to Row 10
+$addTextButton = New-Object System.Windows.Forms.Button
+$addTextButton.Text = "Add Text"
+$addTextButton.Width = 100
+$addTextButton.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom
+$tableLayout.SetColumnSpan($addTextButton, 2)  # Span the button across all columns
+Add-Control -panel $tableLayout -control $addTextButton -row 10 -column 4
+$textNo = 1
+$addTextButton.Tag = @{
+	Rows = $rows
+	RowHeight = $rows
+	TextNo = $textNo
+}
+
+# Create and Add preview Button to Row 10
 $previewButton = New-Object System.Windows.Forms.Button
 $previewButton.Text = "Preview"
 $previewButton.Width = 100
 $previewButton.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom
 $tableLayout.SetColumnSpan($previewButton, 2)  # Span the button across all columns
-Add-Control -panel $tableLayout -control $previewButton -row 10 -column 5
+Add-Control -panel $tableLayout -control $previewButton -row 10 -column 6
 
 # Create and Add OK Button to Row 10
 $okButton = New-Object System.Windows.Forms.Button
@@ -1396,7 +1589,306 @@ $okButton.Text = "Save"
 $okButton.Width = 100
 $okButton.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom
 $tableLayout.SetColumnSpan($okButton, 2)  # Span the button across all columns
-Add-Control -panel $tableLayout -control $okButton -row 10 -column 7
+Add-Control -panel $tableLayout -control $okButton -row 10 -column 8
+
+#init addedText Array
+$global:addedTextElements = @()
+
+# Handle Add Text Button Click
+$addTextButton.Add_Click({
+	if($global:addedTextElements.Length -lt 3){
+		$bros = $addTextButton.Tag.Rows
+		$brows = $addTextButton.Tag.RowHeight
+		$textNon = $addTextButton.Tag.TextNo
+		# Create Labels
+		$Label = New-Object System.Windows.Forms.Label
+		$Label.Text = "Text #$textNon"
+		$Label.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+
+		$TextEnableLabel = New-Object System.Windows.Forms.Label
+		$TextEnableLabel.Text = "Enable"
+		$TextEnableLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+
+		$TextFontLabel = New-Object System.Windows.Forms.Label
+		$TextFontLabel.Text = "Font"
+		$TextFontLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+		
+
+		$TextSizeLabel = New-Object System.Windows.Forms.Label
+		$TextSizeLabel.Text = "Size"
+		$TextSizeLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+
+		$TextColorLabel = New-Object System.Windows.Forms.Label
+		$TextColorLabel.Text = "Color"
+		$TextColorLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+
+		$TextBorderLabel = New-Object System.Windows.Forms.Label
+		$TextBorderLabel.Text = "Border Color"
+		$TextBorderLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+		
+
+		$TextBorderSizeLabel = New-Object System.Windows.Forms.Label
+		$TextBorderSizeLabel.Text = "Size"
+		$TextBorderSizeLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+
+		$TextPositionLabel = New-Object System.Windows.Forms.Label
+		$TextPositionLabel.Text = "Position"
+		$TextPositionLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+		
+
+		$tableLayout.SetColumnSpan($Label, $columns)  # Span the label across 5 columns
+		$tableLayout.SetColumnSpan($TextFontLabel, 5)  # Span the label across 5 columns
+		$tableLayout.SetColumnSpan($TextColorLabel, 2)  # Span the label across 2 columns
+		$tableLayout.SetColumnSpan($TextBorderLabel, 2)  # Span the label across 2 columns
+		$tableLayout.SetColumnSpan($TextPositionLabel, 2)  # Span the label across 2 columns
+
+		# Create Inputs
+		$deleteButton = New-Object System.Windows.Forms.Button
+		$deleteButton.Width = 50
+		$deleteButton.Text = "🗑️"
+		$deleteButton.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+		
+		$deleteButton.Tag = @{
+			ID = $textNon
+		}
+
+		$fontDropdown = New-Object System.Windows.Forms.ComboBox
+		$fontDropdown.Width = 250
+		$fontDropdown.DropDownStyle = "DropDownList"
+		$fontList | ForEach-Object {
+			$fontDropdown.Items.Add($_.Name)
+		} | Out-Null
+		$fontDropdown.SelectedIndex = 0
+		$fontDropdown.Name = "Font SelectedItem"
+		$tableLayout.SetColumnSpan($fontDropdown, 5)  # Span the input across 2 columns
+
+		$sizeInput = New-Object System.Windows.Forms.NumericUpDown
+		$sizeInput.Width = 50
+		$sizeInput.Minimum = 2
+		$sizeInput.Maximum = 256
+		$sizeInput.Value = 36
+		$sizeInput.Increment = 2
+		$sizeInput.Name = "Size Value"
+
+		$colorDropdown = New-Object System.Windows.Forms.ComboBox
+		$colorDropdown.Width = 100
+		$colorDropdown.DropDownStyle = "DropDownList"
+		$ffmpegColors = @("black", "white", "red", "green", "blue", "yellow", "magenta", "cyan", "gray", "darkgray")
+		$ffmpegColors | ForEach-Object { $colorDropdown.Items.Add($_) } | Out-Null
+		$colorDropdown.SelectedIndex = 0
+		$colorDropdown.Name = "Color SelectedItem"
+		$tableLayout.SetColumnSpan($colorDropdown, 2)  # Span the input across 2 columns
+
+		$borderDropdown = New-Object System.Windows.Forms.ComboBox
+		$borderDropdown.Width = 100
+		$borderDropdown.DropDownStyle = "DropDownList"
+		$ffmpegBorderColors = @("none", "black", "white", "red", "green", "blue", "yellow", "magenta", "cyan", "gray", "darkgray")
+		$ffmpegBorderColors | ForEach-Object { $borderDropdown.Items.Add($_) } | Out-Null
+		$borderDropdown.SelectedIndex = 0
+		$borderDropdown.Name = "Border Color SelectedItem"
+		$tableLayout.SetColumnSpan($borderDropdown, 2)  # Span the input across 2 columns
+
+		$borderSizeInput = New-Object System.Windows.Forms.NumericUpDown
+		$borderSizeInput.Width = 50
+		$borderSizeInput.Minimum = 1
+		$borderSizeInput.Maximum = 10
+		$borderSizeInput.Value = 1
+		$borderSizeInput.Increment = 1
+		$borderSizeInput.Name = "Border Size Value"
+
+		$positionDropdown = New-Object System.Windows.Forms.ComboBox
+		$positionDropdown.Width = 100
+		$positionDropdown.DropDownStyle = "DropDownList"
+		$positions = @("Top Left", "Top Middle", "Top Right", "Middle Left", "Middle", "Middle Right", "Bottom Left", "Bottom Middle", "Bottom Right")
+		$positions | ForEach-Object { $positionDropdown.Items.Add($_) } | Out-Null
+		# Determine orientation
+		if ($height -gt $width) {
+			# Portrait
+			Write-Output "Video is Portrait Orientation"
+			$positionDropdown.SelectedIndex = 7
+		} else {
+			# Landscape
+			Write-Output "Video is Landscape Orientation"
+			$positionDropdown.SelectedIndex = 8
+		}
+		$positionDropdown.Name = "Position SelectedItem"
+		$tableLayout.SetColumnSpan($positionDropdown, 2)  # Span the input across 2 columns
+		
+		#Text Label
+		$TextLabel = New-Object System.Windows.Forms.Label
+		$TextLabel.Text = "Text"
+		$TextLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+		$tableLayout.SetColumnSpan($TextLabel,8)  # Span the label across 2 columns
+		
+		#Start Label
+		$StartLabel = New-Object System.Windows.Forms.Label
+		$StartLabel.Text = "Start (s)"
+		$StartLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+		$tableLayout.SetColumnSpan($StartLabel,2)  # Span the label across 2 columns
+		
+		#Duration Label
+		$DurationLabel = New-Object System.Windows.Forms.Label
+		$DurationLabel.Text = "Dur (s)"
+		$DurationLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+		$tableLayout.SetColumnSpan($DurationLabel,2)  # Span the label across 2 columns
+
+		#XPadding Label
+		$xpadLabel = New-Object System.Windows.Forms.Label
+		$xpadLabel.Text = "XPad%"
+		$xpadLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+
+		#YPadding Label
+		$ypadLabel = New-Object System.Windows.Forms.Label
+		$ypadLabel.Text = "YPad%"
+		$ypadLabel.TextAlign = [System.Drawing.ContentAlignment]::BottomLeft
+		
+		# Text Input
+		$Input = New-Object System.Windows.Forms.TextBox
+		$Input.Width = 500
+		$Input.Name = "Text Value"
+		$tableLayout.SetColumnSpan($Input, 7)  # Span the input across 2 columns
+		
+		# Start Input
+		$StartInput = New-Object System.Windows.Forms.NumericUpDown
+		$StartInput.Width = 75
+		$StartInput.Minimum = 0
+		$StartInput.Maximum = 100
+		$StartInput.Value = 0
+		$StartInput.DecimalPlaces = 3
+		$StartInput.Increment = 0.1
+		$StartInput.Name = "Start Value"
+		$tableLayout.SetColumnSpan($StartInput, 2)  # Span the input across 2 columns
+
+		# Duration Input
+		$DurationInput = New-Object System.Windows.Forms.NumericUpDown
+		$DurationInput.Width = 75
+		$DurationInput.Minimum = 0
+		$DurationInput.Maximum = 99999
+		$DurationInput.Value = 0
+		$DurationInput.DecimalPlaces = 3
+		$DurationInput.Increment = 0.1
+		$DurationInput.Name = "Duration Value"
+		$tableLayout.SetColumnSpan($DurationInput, 2)  # Span the input across 2 columns
+
+		# XPad Input
+		$xpadInput = New-Object System.Windows.Forms.NumericUpDown
+		$xpadInput.Width = 100
+		$xpadInput.Minimum = 0
+		$xpadInput.Maximum = 100
+		$xpadInput.Value = 5
+		$xpadInput.Increment = 1
+		$xpadInput.Name = "XPad Value"
+
+		# YPad Input
+		$ypadInput = New-Object System.Windows.Forms.NumericUpDown
+		$ypadInput.Width = 100
+		$ypadInput.Minimum = 0
+		$ypadInput.Maximum = 100
+		$ypadInput.Value = 5
+		$ypadInput.Increment = 1
+		$ypadInput.Name = "YPad Value"
+
+		#load objects into array
+		$global:addedTextElements += [PSCustomObject]@{
+			ID = $textNon
+			Elements = @(
+			$Label,
+			$TextEnableLabel,
+			$TextFontLabel,
+			$TextSizeLabel,
+			$TextColorLabel,
+			$TextBorderLabel,
+			$TextBorderSizeLabel,
+			$TextPositionLabel,
+			$deleteButton,
+			$fontDropdown,
+			$sizeInput,
+			$colorDropdown,
+			$borderDropdown,
+			$borderSizeInput,
+			$positionDropdown,
+			$TextLabel,
+			$StartLabel,
+			$DurationLabel,
+			$xpadLabel,
+			$ypadLabel,
+			$Input,
+			$StartInput,
+			$DurationInput,
+			$xpadInput,
+			$ypadInput
+			)
+		}
+		
+		$deleteButton.Add_Click({
+			$brows = $addTextButton.Tag.RowHeight
+			$brows = $brows - 5
+			$addTextButton.Tag.RowHeight = $brows
+			$id = $this.Tag.ID
+			
+			$form.Height = (30 * $brows )
+			$controlsToRemove = $global:addedTextElements | Where-Object { $_.ID -eq $id }
+			foreach ($control in $controlsToRemove.Elements) {
+				Remove-Control -panel $tableLayout -control $control
+				$control.Dispose()
+			}
+			#Move Buttons
+			#Add-Control -panel $tableLayout -control $addTextButton -row ($bros - 1) -column 4
+			#Add-Control -panel $tableLayout -control $previewButton -row ($bros - 1) -column 6
+			#Add-Control -panel $tableLayout -control $okButton -row ($bros - 1) -column 8
+			# Remove the textbox from the global array
+			$newElements = @()
+			$global:addedTextElements | ForEach-Object { 
+				if($_.ID -ne $id){
+				$newElements += $_
+				}
+			}
+			$global:addedTextElements = $newElements
+		})
+		
+		#add rows
+		$addTextButton.Tag.TextNo = $textNon + 1
+		$form.Height = (30 * ($brows + 4) )
+		#Build form
+		#Move Buttons
+		Add-Control -panel $tableLayout -control $addTextButton -row ($bros + 4) -column 4
+		Add-Control -panel $tableLayout -control $previewButton -row ($bros + 4) -column 6
+		Add-Control -panel $tableLayout -control $okButton -row ($bros + 4) -column 8
+		# Add Labels to Row 0
+		Add-Control -panel $tableLayout -control $Label -row ($bros - 1) -column 0
+		Add-Control -panel $tableLayout -control $TextEnableLabel -row $bros -column 0
+		Add-Control -panel $tableLayout -control $TextFontLabel -row $bros -column 1
+		Add-Control -panel $tableLayout -control $TextSizeLabel -row $bros -column 6
+		Add-Control -panel $tableLayout -control $TextColorLabel -row $bros -column 7
+		Add-Control -panel $tableLayout -control $TextBorderLabel -row $bros -column 9
+		Add-Control -panel $tableLayout -control $TextBorderSizeLabel -row $bros -column 11
+		Add-Control -panel $tableLayout -control $TextPositionLabel -row $bros -column 12
+		# Add Inputs to Row 2
+		Add-Control -panel $tableLayout -control $deleteButton -row ($bros + 1) -column 0
+		Add-Control -panel $tableLayout -control $fontDropdown -row ($bros + 1) -column 1
+		Add-Control -panel $tableLayout -control $sizeInput -row ($bros + 1) -column 6
+		Add-Control -panel $tableLayout -control $colorDropdown -row ($bros + 1) -column 7
+		Add-Control -panel $tableLayout -control $borderDropdown -row ($bros + 1) -column 9
+		Add-Control -panel $tableLayout -control $borderSizeInput -row ($bros + 1) -column 11
+		Add-Control -panel $tableLayout -control $positionDropdown -row ($bros + 1) -column 12
+		# Add Labels to next Row
+		Add-Control -panel $tableLayout -control $TextLabel -row ($bros + 2) -column 0
+		Add-Control -panel $tableLayout -control $StartLabel -row ($bros + 2) -column 8
+		Add-Control -panel $tableLayout -control $DurationLabel -row ($bros + 2) -column 10
+		Add-Control -panel $tableLayout -control $xpadLabel -row ($bros + 2) -column 12
+		Add-Control -panel $tableLayout -control $ypadLabel -row ($bros + 2) -column 13
+		# Add Labels to next Row
+		Add-Control -panel $tableLayout -control $Input -row ($bros + 3) -column 0
+		Add-Control -panel $tableLayout -control $StartInput -row ($bros + 3) -column 8
+		Add-Control -panel $tableLayout -control $DurationInput -row ($bros + 3) -column 10
+		Add-Control -panel $tableLayout -control $xpadInput -row ($bros + 3) -column 12
+		Add-Control -panel $tableLayout -control $ypadInput -row ($bros + 3) -column 13
+		$bros = $bros + 5
+		$brows = $brows + 5
+		$addTextButton.Tag.Rows = $bros
+		$addTextButton.Tag.RowHeight = $brows
+	}
+})
 
 # Handle Preview Button Click
 $previewButton.Add_Click({
@@ -1429,7 +1921,43 @@ $previewButton.Add_Click({
 		TimeXPadding = $xpadTimeInput.Value
 		TimeYPadding = $ypadTimeInput.Value
 	}
-	$drawtext = Process-Video -form $form -height $height -width $width
+	$processedTexts = @()
+
+	$global:addedTextElements | ForEach-Object {
+	
+		$_.Elements | ForEach-Object {
+			$field = $_
+			switch($field.Name){
+				"Font SelectedItem" { $textFont = $field.SelectedItem }
+				"Size Value" { $textSize = $field.Value }
+				"Color SelectedItem" { $textColor = $field.SelectedItem }
+				"Border Color SelectedItem" { $textBorderColor = $field.SelectedItem }
+				"Border Size Value" { $textBorderSize = $field.Value }
+				"Position SelectedItem" { $textPosition = $field.SelectedItem }
+				"Text Value" { $textText = $field.Text.Substring(0, [math]::Min(64, $field.Text.Length)) }
+				"Start Value" { $textStart = [float]$field.Value }
+				"Duration Value" { if($field.Value -gt 0) { $textDuration = [float]$field.Value + $textStart } else { $textDuration = [float]$metaDur } }
+				"XPad Value" { $textXPad = $field.Value }
+				"YPad Value" { $textYPad = $field.Value }
+			}
+		}
+		$settings = @{
+			TextFont = $textFont
+			TextSize = $textSize
+			TextColor = $textColor
+			TextBorderColor = $textBorderColor
+			TextBorderSize = $textBorderSize
+			TextPosition = $textPosition
+			Text = $textText
+			TextStart = $textStart
+			TextDuration = $textDuration
+			TextXPad = $textXPad
+			TextYPad = $textYPad
+		}
+		$processedTexts += $settings
+	}
+
+	$drawtext = Process-Video -form $form -texts $processedTexts -height $height -width $width
 	
 	if($drawtext){
 		if($previewMaxWidth -gt $width){ $previewWidth = $width }
@@ -1487,7 +2015,7 @@ $okButton.Add_Click({
 		Month = $monthInput.Value
 		Day = $dayInput.Value
 		Year = $yearInput.Value
-		DateFormat = $dateFormatInput.Text
+		DateFormat = $dateFormatInput.Text.Substring(0, [math]::Min(32, $dateFormatInput.Length))
 		XPadding = $xpadInput.Value
 		YPadding = $ypadInput.Value
 		EnableTime = $enableTimeCheckbox.Checked
@@ -1501,7 +2029,7 @@ $okButton.Add_Click({
 		Minute = $minuteInput.Value
 		Second = $secondInput.Value
 		AMPM = $ampmDropdown.SelectedItem
-		TimeFormat = $timeFormatInput.Text
+		TimeFormat = $timeFormatInput.Text.Substring(0, [math]::Min(32, $timeFormatInput.Text.Length))
 		TimeXPadding = $xpadTimeInput.Value
 		TimeYPadding = $ypadTimeInput.Value
 	}
@@ -1517,7 +2045,44 @@ if ($form.Tag -eq $null) {
  exit
 }
 
-$drawtext = Process-Video -form $form -height $height -width $width
+$processedTexts = @()
+
+$global:addedTextElements | ForEach-Object {
+	
+	$_.Elements | ForEach-Object {
+		$field = $_
+		switch($field.Name){
+			"Font SelectedItem" { $textFont = $field.SelectedItem }
+			"Size Value" { $textSize = $field.Value }
+			"Color SelectedItem" { $textColor = $field.SelectedItem }
+			"Border Color SelectedItem" { $textBorderColor = $field.SelectedItem }
+			"Border Size Value" { $textBorderSize = $field.Value }
+			"Position SelectedItem" { $textPosition = $field.SelectedItem }
+			"Text Value" { $textText = $field.Text.Substring(0, [math]::Min(64, $field.Text.Length)) }
+			"Start Value" { $textStart = [float]$field.Value }
+			"Duration Value" { if($field.Value -gt 0) { $textDuration = [float]$field.Value + $textStart } else { $textDuration = [float]$metaDur } }
+			"XPad Value" { $textXPad = $field.Value }
+			"YPad Value" { $textYPad = $field.Value }
+		}
+	}
+	$settings = @{
+		TextFont = $textFont
+		TextSize = $textSize
+		TextColor = $textColor
+		TextBorderColor = $textBorderColor
+		TextBorderSize = $textBorderSize
+		TextPosition = $textPosition
+		Text = $textText
+		TextStart = $textStart
+		TextDuration = $textDuration
+		TextXPad = $textXPad
+		TextYPad = $textYPad
+	}
+	$processedTexts += $settings
+}
+
+$drawtext = Process-Video -form $form -texts $processedTexts -height $height -width $width
+
 
 if(-Not $drawtext){
 	Write-Host "No text to draw to video! Operation canceled. Video has not been written"
