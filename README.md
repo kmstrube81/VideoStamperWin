@@ -1,7 +1,7 @@
 # VideoStamperWin
 By Kasey M. Strube
 
-Version 0.3
+Version 0.4
 
 
 Utilizes ffmpeg to automatically add text and timestamps to videos.
@@ -18,11 +18,19 @@ Powershell
 FFMPEG binaries (including ffprobe and ffplay)
 
 
-TODO Version 0.4 Features-
+TODO Version 0.5 Features-
 
-*Stitch multiple videos together and then stamp them.
+*Better input video management.
+
+*Add, Remove, Reorder Clips
+
+*Remove 3 subtitle limit
+
+*add ffmpeg text transitions
 
 Features-
+
+*Stamp multiple videos and then stitch them together.
 
 *add arbitrary text to video with custom start time and duration.
 
