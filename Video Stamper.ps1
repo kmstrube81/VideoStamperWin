@@ -7,7 +7,7 @@
 #                                                        | |              
 #                                                        |_|
 # By Kasey M. Strube
-# Version 0.4
+# Version 0.4.1
 #
 # Utilizes ffmpeg to automatically add text and timestamps to videos.
 # Used primary to convert iPhone .MOVs to MP4 for portability and add a
@@ -24,6 +24,40 @@ if ($PSBoundParameters.ContainsKey('Verbose')) { # Command line specifies -Verbo
 }
 if($Verbose) {
   Write-Host "Running VideoStamper in Verbose Mode"
+}
+
+# Function to build format dialog
+function Show-FormatSelectionDialog {
+    $formatForm = New-Object System.Windows.Forms.Form
+    $formatForm.Text = "Select Output Format"
+    $formatForm.Size = New-Object System.Drawing.Size(300,150)
+    $formatForm.StartPosition = "CenterScreen"
+
+    $label = New-Object System.Windows.Forms.Label
+    $label.Text = "Choose output format:"
+    $label.Location = New-Object System.Drawing.Point(10,20)
+    $label.Size = New-Object System.Drawing.Size(280,20)
+    $formatForm.Controls.Add($label)
+
+    $comboBox = New-Object System.Windows.Forms.ComboBox
+    $comboBox.Items.AddRange(@("mp4", "webm", "gif"))
+    $comboBox.SelectedIndex = 0
+    $comboBox.Location = New-Object System.Drawing.Point(10,50)
+    $comboBox.Size = New-Object System.Drawing.Size(260,20)
+    $formatForm.Controls.Add($comboBox)
+
+    $okButton = New-Object System.Windows.Forms.Button
+    $okButton.Text = "OK"
+    $okButton.Location = New-Object System.Drawing.Point(100,80)
+    $okButton.Add_Click({ $formatForm.DialogResult = [System.Windows.Forms.DialogResult]::OK })
+    $formatForm.Controls.Add($okButton)
+
+    $result = $formatForm.ShowDialog()
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        return $comboBox.SelectedItem
+    } else {
+        return $null
+    }
 }
 
 # Function to convert time format strings
@@ -2572,20 +2606,60 @@ tt = AM/PM
 	$stampedClips += $output
 }
 
-
-
+if($Verbose){
+	Write $stampedClips
+}
 
 if ($stampedClips.Count -gt 1) {
     $saveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
     $saveFileDialog.InitialDirectory = (Split-Path $inputFiles[0])
-    $saveFileDialog.Filter = "MP4 Video (*.mp4)|*.mp4"
-    $saveFileDialog.Title  = "Save stitched video as..."
+    $saveFileDialog.Filter = "MP4 Video (*.mp4)|*.mp4|WEBM Video (*.webm)|*.webm|GIF (*.gif)|*.gif"
+    $saveFileDialog.Title  = "Save stamped video as..."
     if ($saveFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $finalOut = $saveFileDialog.FileName
         $listFile = Join-Path $tempDir "concat_list.txt"
+		$tempFile = Join-Path $tempDir "temp.mp4"
         $stampedClips | ForEach-Object { "file '$($_)'" } | Out-File -FilePath $listFile -Encoding ascii
-        & $ffmpeg -hide_banner -loglevel error -f concat -safe 0 -i $listFile -c copy -y $finalOut
-        Write-Output "Finished - stitched file saved to:  $finalOut"
+		
+		if($Verbose){
+			Get-Content -Path $listFile		
+		}
+		
+        & $ffmpeg -hide_banner -loglevel error -f concat -safe 0 -i $listFile -c copy -y $tempFile
+        Write-Verbose "Finished - stitched file saved to:  $tempFile"
+		$finalFormat = [System.IO.Path]::getExtension($finalOut)
+		switch ($finalFormat) {
+			'.mp4' {
+				Move-Item -LiteralPath $tempFile -Destination $finalOut -Force
+				Write-Verbose "Finished - stamped mp4 saved to:  $finalOut"
+			}
+			'.webm' {
+				$args = @(
+					"-y",
+					"-i", $tempFile,
+					"-c:v", "libvpx-vp9",
+					"-b:v", "2000k",
+					"-vf", "scale=720:-1",
+					"-movflags", "use_metadata_tags",
+					"-preset", "ultrafast",
+					"-map_metadata", "0",
+					$finalOut
+				)
+				& $ffmpeg @args
+				Write-Verbose "Finished - stamped webm video saved to:  $finalOut"
+			}
+			'.gif' {
+				$args = @(
+					"-y",
+					"-i", $tempFile,
+					"-vf", "fps=10,scale=720:-1:flags=lanczos",
+					"-loop", "0",
+					$finalOut
+				)
+				& $ffmpeg @args
+				Write-Verbose "Finished - stamped gif saved to:  $finalOut"
+			}
+		}
     } else {
         Write-Warning "Stitching cancelled - leaving stamped clips intact in $tempDir"
     }
@@ -2593,12 +2667,43 @@ if ($stampedClips.Count -gt 1) {
     # Only one stamped clip – ask where to save it
     $saveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
     $saveFileDialog.InitialDirectory = (Split-Path $inputFiles[0])
-    $saveFileDialog.Filter = "MP4 Video (*.mp4)|*.mp4"
-    $saveFileDialog.Title  = "Save stamped video as…"
+    $saveFileDialog.Filter = "MP4 Video (*.mp4)|*.mp4|WEBM Video (*.webm)|*.webm|GIF (*.gif)|*.gif"
+    $saveFileDialog.Title  = "Save stamped video as..."
     if ($saveFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $finalOut = $saveFileDialog.FileName
-        Move-Item -LiteralPath $stampedClips[0] -Destination $finalOut -Force
-        Write-Output "Finished - stamped file saved to:  $finalOut"
+		$finalFormat = [System.IO.Path]::getExtension($finalOut)
+		switch ($finalFormat) {
+			'.mp4' {
+				Move-Item -LiteralPath $stampedClips[0] -Destination $finalOut -Force
+				Write-Verbose "Finished - stamped mp4 saved to:  $finalOut"
+			}
+			'.webm' {
+				$args = @(
+					"-y",
+					"-i", $stampedClips[0],
+					"-c:v", "libvpx-vp9",
+					"-b:v", "2000k",
+					"-vf", "scale=720:-1",
+					"-movflags", "use_metadata_tags",
+					"-preset", "ultrafast",
+					"-map_metadata", "0",
+					$finalOut
+				)
+				& $ffmpeg @args
+				Write-Verbose "Finished - stamped webm video saved to:  $finalOut"
+			}
+			'.gif' {
+				$args = @(
+					"-y",
+					"-i", $stampedClips[0],
+					"-vf", "fps=10,scale=720:-1:flags=lanczos",
+					"-loop", "0",
+					$finalOut
+				)
+				& $ffmpeg @args
+				Write-Verbose "Finished - stamped gif saved to:  $finalOut"
+			}
+		}
     } else {
         Write-Warning "Save cancelled - leaving stamped clip in $tempDir"
     }
