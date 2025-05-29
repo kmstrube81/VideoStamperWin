@@ -7,7 +7,7 @@
 #                                                        | |              
 #                                                        |_|
 # By Kasey M. Strube
-# Version 0.4.1
+# Version 0.4.3
 #
 # Utilizes ffmpeg to automatically add text and timestamps to videos.
 # Used primary to convert iPhone .MOVs to MP4 for portability and add a
@@ -18,48 +18,15 @@
 Param (
 
 )
-$Verbose = $false
+$UseVerbose = $false
 if ($PSBoundParameters.ContainsKey('Verbose')) { # Command line specifies -Verbose[:$false]
-    $Verbose = $PsBoundParameters.Get_Item('Verbose')
+    $UseVerbose = $PsBoundParameters.Get_Item('Verbose')
 }
-if($Verbose) {
+if($UseVerbose) {
   Write-Host "Running VideoStamper in Verbose Mode"
 }
 
-# Function to build format dialog
-function Show-FormatSelectionDialog {
-    $formatForm = New-Object System.Windows.Forms.Form
-    $formatForm.Text = "Select Output Format"
-    $formatForm.Size = New-Object System.Drawing.Size(300,150)
-    $formatForm.StartPosition = "CenterScreen"
-
-    $label = New-Object System.Windows.Forms.Label
-    $label.Text = "Choose output format:"
-    $label.Location = New-Object System.Drawing.Point(10,20)
-    $label.Size = New-Object System.Drawing.Size(280,20)
-    $formatForm.Controls.Add($label)
-
-    $comboBox = New-Object System.Windows.Forms.ComboBox
-    $comboBox.Items.AddRange(@("mp4", "webm", "gif"))
-    $comboBox.SelectedIndex = 0
-    $comboBox.Location = New-Object System.Drawing.Point(10,50)
-    $comboBox.Size = New-Object System.Drawing.Size(260,20)
-    $formatForm.Controls.Add($comboBox)
-
-    $okButton = New-Object System.Windows.Forms.Button
-    $okButton.Text = "OK"
-    $okButton.Location = New-Object System.Drawing.Point(100,80)
-    $okButton.Add_Click({ $formatForm.DialogResult = [System.Windows.Forms.DialogResult]::OK })
-    $formatForm.Controls.Add($okButton)
-
-    $result = $formatForm.ShowDialog()
-    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        return $comboBox.SelectedItem
-    } else {
-        return $null
-    }
-}
-
+$VideoFilter = "MP4 Video (*.mp4)|*.mp4|WEBM Video (*.webm)|*.webm|GIF (*.gif)|*.gif"
 # Function to convert time format strings
 function Convert-DateFormat {
     param (
@@ -175,7 +142,7 @@ function Convert-TimeFormat {
     return $strftimeFormat
 }
 
-# Function to escaoe ffmpeg option text
+# Function to escape ffmpeg option text
 function Escape-FFmpegOption {
     param (
         [string]$UnescapedString
@@ -758,7 +725,7 @@ Write-Output "Welcome to Video Stamper!"
 Write-Output "This tool lets you add date and time stamps to your videos with ease."
 Write-Output ""
 
-if($Verbose){ 
+if($UseVerbose){ 
 	Write-Output "Press any key to begin..."
 	Write-Output ""
 
@@ -825,7 +792,7 @@ if(-Not (Test-Path $ffplay)) {
         $validPath = $true
     }
   }
-  if($Verbose){ 
+  if($UseVerbose){ 
 	Write-Output "ffplay.exe found in the current directory. Press any key to continue..."
 	# Pause for any key press
 	$x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -879,7 +846,7 @@ if(-Not (Test-Path $ffprobe)) {
         $validPath = $true
     }
   }
-  if($Verbose){ 
+  if($UseVerbose){ 
 	Write-Output "ffprobe.exe found in the current directory. Press any key to continue..."
 	# Pause for any key press
 	$x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -934,7 +901,7 @@ if(-Not (Test-Path $ffmpeg)) {
         $validPath = $true
     }
   }
-  if($Verbose){ 
+  if($UseVerbose){ 
 	Write-Output "ffmpeg.exe found in the current directory. Press any key to continue..."
 	# Pause for any key press
 	$x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -973,13 +940,13 @@ $stampedClips = @()
 foreach ($inputFile in $inputFiles) {
     Write-Verbose "Processing $inputFile"
 	# Initialize ffprobe command to extract metadata
-	$ffprobeCmd = &$ffprobe -v quiet -print_format json -show_entries stream=width,height,duration -show_entries format_tags "$inputFile"
+	$ffprobeCmd = &$ffprobe -v quiet -print_format json -select_streams v:0 -show_entries stream -show_entries format_tags "$inputFile"
 
 	# parse Json
 	$jsonObject = $ffprobeCmd | ConvertFrom-Json
 
 	Write-Verbose "Video Metadata:"
-	if($Verbose){
+	if($UseVerbose){
 		Write $jsonObject
 	}
 
@@ -1015,6 +982,33 @@ foreach ($inputFile in $inputFiles) {
 	# Get the width and height
 	$width = $jsonObject.streams[0].width
 	$height = $jsonObject.streams[0].height
+
+	# ────────────────────────────────────────────────────────────────
+	# Detect rotation and, for 90 / 270, swap width / height
+	# ────────────────────────────────────────────────────────────────
+	$rotation = $null
+
+	# Pull rotation from side-data (preferred) …
+	if ($jsonObject.streams[0].side_data_list) {
+		foreach ($sd in $jsonObject.streams[0].side_data_list) {
+			if ($sd.rotation) { $rotation = [int]$sd.rotation; break }
+		}
+	}
+
+	# … or from the QuickTime rotate tag if side-data was empty
+	if (-not $rotation -and $jsonObject.streams[0].tags.rotate) {
+		$rotation = [int]$jsonObject.streams[0].tags.rotate
+	}
+	
+	Write-Verbose "rotation value is $rotation"
+
+	if($rotation -eq 90 -Or $rotation -eq -90 -Or $rotation -eq 270 -Or $rotation -eq -270) {
+		$width,$height = $height,$width
+        Write-Verbose "Rotation $rotation detected - swapped to ${width}x${height}"
+	} else {
+		Write-Verbose "Rotation $rotation detected - video resolution set ${width}x${height}" 
+	}
+
 	$metaDur = $jsonObject.streams[0].duration
 
 	#get default preview sizeInput
@@ -2394,12 +2388,12 @@ tt = AM/PM
 		if($drawtext){
 			if($previewMaxWidth -gt $width){ $previewWidth = $width }
 			if($previewMaxHeight -gt $height){ $previewHeight = $height }
-			if ($Verbose) {
+			if($UseVerbose) {
 				# Build the arguments array
 				$args = @(
 					"-autoexit",
 					"-i", $inputFile,
-					"-vf", $drawtext,
+					"-vf", "`"$drawtext`"",
 					"-x", $previewWidth,
 					"-y", $previewHeight,
 					"-preset", "ultrafast",
@@ -2420,7 +2414,7 @@ tt = AM/PM
 					"-hide_banner",
 					"-loglevel", "error",
 					"-i", $inputFile,
-					"-vf", $drawtext,
+					"-vf", "`"$drawtext`"",
 					"-x", $previewWidth,
 					"-y", $previewHeight,
 					"-preset", "ultrafast",
@@ -2562,12 +2556,12 @@ tt = AM/PM
 		TimeFormat = $timeFormatInput.Text
 	}
 	
-	if ($Verbose) {
+	if($UseVerbose) {
 		# Build the arguments array
 		$args = @(
 			"-y",
 			"-i", $inputFile,
-			"-vf", $drawtext,
+			"-vf", "`"$drawtext`"",
 			"-crf", "27",
 			"-movflags", "use_metadata_tags",
 			"-map_metadata", "0",
@@ -2590,7 +2584,7 @@ tt = AM/PM
 			"-loglevel", "error",
 			"-y",
 			"-i", $inputFile,
-			"-vf", $drawtext,
+			"-vf", "`"$drawtext`"",
 			"-crf", "27",
 			"-movflags", "use_metadata_tags",
 			"-map_metadata", "0",
@@ -2606,24 +2600,22 @@ tt = AM/PM
 	$stampedClips += $output
 }
 
-if($Verbose){
+if($UseVerbose){
 	Write $stampedClips
 }
 
 if ($stampedClips.Count -gt 1) {
     $saveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
+    $saveFileDialog.AddExtension = $true
+    $saveFileDialog.DefaultExt = "mp4"
     $saveFileDialog.InitialDirectory = (Split-Path $inputFiles[0])
-    $saveFileDialog.Filter = "MP4 Video (*.mp4)|*.mp4|WEBM Video (*.webm)|*.webm|GIF (*.gif)|*.gif"
+    $saveFileDialog.Filter = $VideoFilter
     $saveFileDialog.Title  = "Save stamped video as..."
     if ($saveFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $finalOut = $saveFileDialog.FileName
         $listFile = Join-Path $tempDir "concat_list.txt"
 		$tempFile = Join-Path $tempDir "temp.mp4"
         $stampedClips | ForEach-Object { "file '$($_)'" } | Out-File -FilePath $listFile -Encoding ascii
-		
-		if($Verbose){
-			Get-Content -Path $listFile		
-		}
 		
         & $ffmpeg -hide_banner -loglevel error -f concat -safe 0 -i $listFile -c copy -y $tempFile
         Write-Verbose "Finished - stitched file saved to:  $tempFile"
@@ -2639,10 +2631,10 @@ if ($stampedClips.Count -gt 1) {
 					"-i", $tempFile,
 					"-c:v", "libvpx-vp9",
 					"-b:v", "2000k",
-					"-vf", "scale=720:-1",
+					"-vf", "scale='min(iw,720)':-1",
 					"-movflags", "use_metadata_tags",
 					"-preset", "ultrafast",
-					"-map_metadata", "0",
+					"-r", "10", "-map_metadata", "0",
 					$finalOut
 				)
 				& $ffmpeg @args
@@ -2652,7 +2644,7 @@ if ($stampedClips.Count -gt 1) {
 				$args = @(
 					"-y",
 					"-i", $tempFile,
-					"-vf", "fps=10,scale=720:-1:flags=lanczos",
+					"-vf", "fps=10,scale='min(iw,720)':-1:flags=lanczos",
 					"-loop", "0",
 					$finalOut
 				)
@@ -2666,8 +2658,10 @@ if ($stampedClips.Count -gt 1) {
 } else {
     # Only one stamped clip – ask where to save it
     $saveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
+    $saveFileDialog.AddExtension = $true
+    $saveFileDialog.DefaultExt = "mp4"
     $saveFileDialog.InitialDirectory = (Split-Path $inputFiles[0])
-    $saveFileDialog.Filter = "MP4 Video (*.mp4)|*.mp4|WEBM Video (*.webm)|*.webm|GIF (*.gif)|*.gif"
+    $saveFileDialog.Filter = $VideoFilter
     $saveFileDialog.Title  = "Save stamped video as..."
     if ($saveFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $finalOut = $saveFileDialog.FileName
@@ -2683,10 +2677,10 @@ if ($stampedClips.Count -gt 1) {
 					"-i", $stampedClips[0],
 					"-c:v", "libvpx-vp9",
 					"-b:v", "2000k",
-					"-vf", "scale=720:-1",
+					"-vf", "scale='min(iw,720)':-1",
 					"-movflags", "use_metadata_tags",
 					"-preset", "ultrafast",
-					"-map_metadata", "0",
+					"-r", "10", "-map_metadata", "0",
 					$finalOut
 				)
 				& $ffmpeg @args
@@ -2696,7 +2690,7 @@ if ($stampedClips.Count -gt 1) {
 				$args = @(
 					"-y",
 					"-i", $stampedClips[0],
-					"-vf", "fps=10,scale=720:-1:flags=lanczos",
+					"-vf", "fps=10,scale='min(iw,720)':-1:flags=lanczos",
 					"-loop", "0",
 					$finalOut
 				)
